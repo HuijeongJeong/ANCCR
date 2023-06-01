@@ -1,6 +1,6 @@
-function [DA,ANCCR,PRC,SRC,NC,Rs,Delta,Mij,Mi] =...
-    calculateANCCR_beta(eventlog, T, alpha, k,samplinginterval,w,threshold,...
-    minimumrate,beta,alpha_r,maximumjitter,optolog,omidx,exact_mean_or_not,nevent_for_edge)
+function [DA,ANCCR,PRC,SRC,NC,Rs,Delta,Mij,Mi,sumadj,edge] =...
+    calculateANCCR_v2(eventlog, T, alpha, k,samplinginterval,w,threshold,...
+    minimumrate,beta,alpha_r,maximumjitter,optolog,omidx,exact_mean_or_not,nevent_for_edge,dropout)
 if alpha_r>1
     alpha_r = 1;
 end
@@ -22,6 +22,10 @@ if nargin<=14
     % if nevent_for_edge>0, use averaged NC for last nevent to calculate
     % edge
     nevent_for_edge = 0; 
+end
+
+if nargin<=15
+    dropout = nan;
 end
 
 % omtrue: whether the omission state will be used or not in the calculaton of ANCCR
@@ -56,6 +60,8 @@ gamma = exp(-1./T);
 R = zeros(nstimuli,nstimuli);
 numevents = zeros(nstimuli,1);
 DA = zeros(ntime,1);
+sumadj = zeros(nstimuli,nstimuli,ntime);
+edge = zeros(nstimuli,nstimuli,ntime);
 
 beta = beta(unique(eventlog(:,1)));
 Imct = beta(:)>threshold;
@@ -131,7 +137,7 @@ for jt = 1:ntime
         NC(:,:,jt) = w*SRC(:,:,jt)+(1-w)*PRC(:,:,jt);
         
         % Indicator for whether an event is associated with another event
-        Iedge = mean(NC(:,je,max([1,jt-nevent_for_edge]:jt)),3)>threshold;
+        Iedge = mean(NC(:,je,max([1,jt-nevent_for_edge]):jt),3)>threshold;
         Iedge(je) = false;
         
         % once the cause of reward state is revealed, omission state of that
@@ -144,22 +150,31 @@ for jt = 1:ntime
         % calculate ANCCR for every event
         % Rjj is externally driven; the magnitude of stimulus an animal just experienced
         R(je,je) = eventlog(jt,3);
-            
+        
         for ke = 1:nstimuli
             % Update edge indicator
-            Iedge_ke = mean(NC(:,ke,max([1,jt-nevent_for_edge]:jt)),3)>threshold;
+            Iedge_ke = mean(NC(:,ke,max([1,jt-nevent_for_edge]):jt),3)>threshold;
             Iedge_ke(ke) = false;
+            
+            % for debugging purpose, if there's dropout(X,ke), you don't adjust
+            % ANCCR(ke,Y) by ANCCR(X,Y)
+            if ~isnan(dropout)
+                Iedge_ke(dropout(:,ke)) = false;
+            end
+
             % update ANCCR
+            edge(:,ke,jt) = Iedge_ke;
+            sumadj(ke,:,jt) = sum(ANCCR(:,:,jt).*Delta(:,jt).*repmat(Iedge_ke,1,nstimuli));
             ANCCR(ke,:,jt) = NC(ke,:,jt).*R(ke,:)-...
                     sum(ANCCR(:,:,jt).*Delta(:,jt).*repmat(Iedge_ke,1,nstimuli));
         end
-
-
+        
         if ~(optolog(jt,1) == 1) % If target is not inhibited, normal DA
             DA(jt) = sum(ANCCR(je,:,jt).*Imct')+beta(je);
         else % If target is inhibited, replace DA
             DA(jt) = optolog(jt,2);
         end
+        
 
         if ismember(je,omidx(:,1))
             je_om = find(je==omidx(:,1));
