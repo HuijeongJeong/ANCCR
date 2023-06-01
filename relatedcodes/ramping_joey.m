@@ -18,9 +18,9 @@ k = 1;
 Tratio = 2;
 alpha = 0.02;
 alpha_r = 0.2;
-threshold = 0.5;
+threshold = 0.4;
 minimumrate = 10^(-3);
-beta = [zeros(1,9),1]';
+beta = [zeros(1,9),0.5]';
 maximumjitter = 0.1;
 
 nExp = size(meanITI*2,1); % number of experiments
@@ -49,7 +49,7 @@ for iiter = 1:nIter
             %% simulate
             % assume change in T
             IRI = cuecuedelay*(ncue(itone)-1)+cuerewdelay(itone)+meanITI(iITI)+consumdelay;
-            [DA,ANCCR,PRC,SRC,NC,~,~,Mij,Mi] = calculateANCCR_beta(eventlog,IRI*Tratio,...
+            [DA,ANCCR,PRC,SRC,NC,~,~,Mij,Mi] = calculateANCCR_v2(eventlog,IRI*Tratio,...
                 alpha, k, samplingperiod,w,threshold,minimumrate,beta([1:ncue(itone),ncue(1)+1]),alpha_r,maximumjitter);
             incue = find(eventlog(:,1)==1);
             
@@ -73,8 +73,14 @@ for itone = 1:2
     plot(0:9,darsp{iITI+(itone-1)*2},'Color',clr_light{itone});
     errorbar(0:9,mean(darsp{iITI+(itone-1)*2},1),std(darsp{iITI+(itone-1)*2},[],1)/sqrt(nIter),clr{itone});
 end
-ylim([0 1])
+ylim([0 1.2])
+xlim([-1 10])
 title(ITItype{iITI})
+plot([0 0 nan 9 9],[0 1.2 nan 0 1.2],'k:')
+xlabel('Time from cue (s)')
+if iITI==1
+ylabel('simulated DA response')
+end
 end
 %%
 
